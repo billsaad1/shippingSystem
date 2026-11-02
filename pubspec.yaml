@@ -1,0 +1,36 @@
+name: shipping_system
+description: "نظام محلي مبسط لإصدار فواتير أجور الشحن وسندات القبض"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  file_selector: ^1.1.0
+  path: ^1.9.1
+  pdf: ^3.13.1
+  printing: ^5.15.1
+  sqflite_common: ^2.5.10+1
+  sqflite_common_ffi: ^2.4.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/company_mark.png
+    - assets/fonts/NotoSans-Regular.ttf
+    - assets/fonts/NotoSans-Bold.ttf
+  fonts:
+    - family: NotoNaskhArabic
+      fonts:
+        - asset: assets/fonts/NotoNaskhArabic-Regular.ttf
+        - asset: assets/fonts/NotoNaskhArabic-Bold.ttf
+          weight: 700
