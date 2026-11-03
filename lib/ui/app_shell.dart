@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../data/local_database.dart';
+import '../models/document_models.dart';
+import 'company_settings_screen.dart';
 import 'document_forms.dart';
 
 class AppShell extends StatefulWidget {
@@ -14,27 +18,72 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
+  late final ValueNotifier<ShippingInvoice?> _invoiceToImport;
+  CompanyProfile _companyProfile = const CompanyProfile.defaults();
+
+  @override
+  void initState() {
+    super.initState();
+    _invoiceToImport = ValueNotifier(null);
+    _loadCompanyProfile();
+  }
+
+  Future<void> _loadCompanyProfile() async {
+    try {
+      final profile = await widget.database.getCompanyProfile();
+      if (mounted) setState(() => _companyProfile = profile);
+    } catch (_) {
+      // Keep the blank defaults available if a profile row cannot be read.
+    }
+  }
+
+  @override
+  void dispose() {
+    _invoiceToImport.dispose();
+    super.dispose();
+  }
+
+  void _createReceiptFromInvoice(ShippingInvoice invoice) {
+    setState(() => _selectedIndex = 1);
+    _invoiceToImport.value = invoice;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final title = _selectedIndex == 0 ? 'إصدار فاتورة شحن' : 'إصدار سند قبض';
+    final title = switch (_selectedIndex) {
+      0 => 'إصدار فاتورة شحن',
+      1 => 'إصدار سند قبض',
+      _ => 'إعدادات الشركة',
+    };
     return Scaffold(
       body: Row(
         children: [
           _SideNavigation(
             selectedIndex: _selectedIndex,
+            companyProfile: _companyProfile,
             onSelect: (index) => setState(() => _selectedIndex = index),
           ),
           Expanded(
             child: Column(
               children: [
-                _TopBar(title: title),
+                if (_selectedIndex != 2) _TopBar(title: title),
                 Expanded(
                   child: IndexedStack(
                     index: _selectedIndex,
                     children: [
-                      InvoiceFormScreen(database: widget.database),
-                      ReceiptFormScreen(database: widget.database),
+                      InvoiceFormScreen(
+                        database: widget.database,
+                        onCreateReceipt: _createReceiptFromInvoice,
+                      ),
+                      ReceiptFormScreen(
+                        database: widget.database,
+                        invoiceToImport: _invoiceToImport,
+                      ),
+                      CompanySettingsScreen(
+                        database: widget.database,
+                        onSaved: (profile) =>
+                            setState(() => _companyProfile = profile),
+                      ),
                     ],
                   ),
                 ),
@@ -48,9 +97,14 @@ class _AppShellState extends State<AppShell> {
 }
 
 class _SideNavigation extends StatelessWidget {
-  const _SideNavigation({required this.selectedIndex, required this.onSelect});
+  const _SideNavigation({
+    required this.selectedIndex,
+    required this.companyProfile,
+    required this.onSelect,
+  });
 
   final int selectedIndex;
+  final CompanyProfile companyProfile;
   final ValueChanged<int> onSelect;
 
   @override
@@ -70,17 +124,30 @@ class _SideNavigation extends StatelessWidget {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: Image.asset(
-                'assets/images/company_mark.png',
-                fit: BoxFit.contain,
-              ),
+              child:
+                  companyProfile.logoPath.trim().isNotEmpty &&
+                      File(companyProfile.logoPath).existsSync()
+                  ? Image.file(
+                      File(companyProfile.logoPath),
+                      fit: BoxFit.contain,
+                    )
+                  : const Icon(
+                      Icons.local_shipping_outlined,
+                      color: Color(0xFF153A5B),
+                      size: 38,
+                    ),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'نظام الشحن',
-              style: TextStyle(
+            Text(
+              companyProfile.arabicName.trim().isEmpty
+                  ? 'نظام الشحن'
+                  : companyProfile.arabicName.trim(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
                 color: Colors.white,
-                fontSize: 20,
+                fontSize: 16,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -101,6 +168,12 @@ class _SideNavigation extends StatelessWidget {
               label: 'سند قبض - شيك',
               selected: selectedIndex == 1,
               onTap: () => onSelect(1),
+            ),
+            _NavigationButton(
+              icon: Icons.business_outlined,
+              label: 'بيانات الشركة',
+              selected: selectedIndex == 2,
+              onTap: () => onSelect(2),
             ),
             const Spacer(),
             const Padding(
