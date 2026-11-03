@@ -44,6 +44,41 @@ void main() {
     });
   });
 
+  group('CompanyProfile and linked receipt', () {
+    test('round-trips company identity, logo and signature labels', () {
+      const profile = CompanyProfile(
+        arabicName: 'شركة جديدة',
+        englishName: 'New Shipping Co.',
+        logoPath: r'C:\company\logo.png',
+        signature1Label: 'المستلم',
+        signature2Label: 'المحاسب',
+        signature3Label: '',
+      );
+
+      final decoded =
+          jsonDecode(jsonEncode(profile.toJson())) as Map<String, dynamic>;
+      final restored = CompanyProfile.fromJson(decoded);
+
+      expect(restored.arabicName, profile.arabicName);
+      expect(restored.englishName, profile.englishName);
+      expect(restored.logoPath, profile.logoPath);
+      expect(restored.receiptSignatureLabels, ['المستلم', 'المحاسب', '']);
+    });
+
+    test('round-trips the source invoice number on a receipt', () {
+      const receipt = ReceiptVoucher(
+        receiptNumber: 'R-2',
+        sourceInvoiceNumber: 'INV-7',
+      );
+
+      final decoded =
+          jsonDecode(jsonEncode(receipt.toJson())) as Map<String, dynamic>;
+      final restored = ReceiptVoucher.fromJson(decoded);
+
+      expect(restored.sourceInvoiceNumber, 'INV-7');
+    });
+  });
+
   group('AmountToWordsArabic', () {
     test('includes currency and wraps the amount with the standard phrase', () {
       final words = AmountToWordsArabic.convert(34484, 'USD');
