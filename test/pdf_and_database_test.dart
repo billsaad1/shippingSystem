@@ -28,7 +28,9 @@ void main() {
 
     expect(String.fromCharCodes(bytes.take(4)), '%PDF');
     expect(bytes.length, greaterThan(1000));
-    await File('/tmp/shipping-system-invoice-test.pdf').writeAsBytes(bytes);
+    await File(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}shipping-system-invoice-test.pdf',
+    ).writeAsBytes(bytes);
   });
 
   test('generates a landscape receipt PDF', () async {
@@ -46,7 +48,9 @@ void main() {
 
     expect(String.fromCharCodes(bytes.take(4)), '%PDF');
     expect(bytes.length, greaterThan(1000));
-    await File('/tmp/shipping-system-receipt-test.pdf').writeAsBytes(bytes);
+    await File(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}shipping-system-receipt-test.pdf',
+    ).writeAsBytes(bytes);
   });
 
   test('stores and retrieves invoices and receipts in SQLite', () async {
