@@ -10,7 +10,6 @@ install:
         git clone --depth 1 --branch stable https://github.com/flutter/flutter.git $flutterRoot
         if ($LASTEXITCODE -ne 0) { throw 'Failed to install Flutter SDK.' }
       }
-      Add-AppveyorPath "$flutterRoot\bin"
       $env:Path = "$flutterRoot\bin;$env:Path"
       flutter --version
       flutter config --enable-windows-desktop
@@ -18,11 +17,16 @@ install:
       if ($LASTEXITCODE -ne 0) { throw 'Failed to install Inno Setup.' }
 
 build_script:
-  - cmd: flutter pub get
-  - cmd: flutter analyze
-  - cmd: flutter test --reporter expanded
-  - cmd: flutter build windows --release
   - ps: |
+      $env:Path = 'C:\flutter\bin;' + $env:Path
+      flutter pub get
+      if ($LASTEXITCODE -ne 0) { throw 'flutter pub get failed.' }
+      flutter analyze
+      if ($LASTEXITCODE -ne 0) { throw 'flutter analyze failed.' }
+      flutter test --reporter expanded
+      if ($LASTEXITCODE -ne 0) { throw 'flutter test failed.' }
+      flutter build windows --release
+      if ($LASTEXITCODE -ne 0) { throw 'flutter build windows failed.' }
       $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
       if (-not (Test-Path $compiler)) { throw "Inno Setup compiler not found: $compiler" }
       & $compiler "installer\ShippingSystem.iss"
