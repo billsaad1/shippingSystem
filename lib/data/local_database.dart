@@ -13,10 +13,12 @@ class LocalDatabase {
 
   static Future<LocalDatabase> open() async {
     sqfliteFfiInit();
-    final directory = Directory(_applicationDataPath());
+    final directory = Directory(applicationDataPath());
     await directory.create(recursive: true);
     return _open(p.join(directory.path, 'shipping_system.db'));
   }
+
+  static String applicationDataPath() => _applicationDataPath();
 
   /// Opens an in-memory database for tests. It is never used by the app itself.
   static Future<LocalDatabase> openInMemory() async {
@@ -28,7 +30,7 @@ class LocalDatabase {
     final database = await databaseFactoryFfi.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onCreate: (db, version) async {
           await db.execute('''
             CREATE TABLE invoices (
@@ -48,6 +50,22 @@ class LocalDatabase {
               updated_at TEXT NOT NULL
             )
           ''');
+          await db.execute('''
+            CREATE TABLE company_profile (
+              id INTEGER PRIMARY KEY CHECK (id = 1),
+              payload_json TEXT NOT NULL
+            )
+          ''');
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await db.execute('''
+              CREATE TABLE company_profile (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                payload_json TEXT NOT NULL
+              )
+            ''');
+          }
         },
       ),
     );
@@ -102,6 +120,33 @@ class LocalDatabase {
           ),
         )
         .toList();
+  }
+
+  Future<CompanyProfile> getCompanyProfile() async {
+    final rows = await _database.query(
+      'company_profile',
+      where: 'id = ?',
+      whereArgs: [1],
+      limit: 1,
+    );
+    if (rows.isEmpty) return const CompanyProfile.defaults();
+
+    final payload = rows.single['payload_json'];
+    if (payload is! String) return const CompanyProfile.defaults();
+    try {
+      return CompanyProfile.fromJson(
+        jsonDecode(payload) as Map<String, dynamic>,
+      );
+    } on Object {
+      return const CompanyProfile.defaults();
+    }
+  }
+
+  Future<void> saveCompanyProfile(CompanyProfile profile) async {
+    await _database.insert('company_profile', {
+      'id': 1,
+      'payload_json': jsonEncode(profile.toJson()),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> close() => _database.close();
