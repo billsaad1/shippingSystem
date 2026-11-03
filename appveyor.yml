@@ -7,8 +7,8 @@ install:
   - ps: |
       $flutterRoot = 'C:\flutter'
       if (-not (Test-Path $flutterRoot)) {
-        git clone --depth 1 --branch stable https://github.com/flutter/flutter.git $flutterRoot
-        if ($LASTEXITCODE -ne 0) { throw 'Failed to install Flutter SDK.' }
+        git clone --depth 1 --branch 3.47.9 https://github.com/flutter/flutter.git $flutterRoot
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to install Flutter 3.47.9 SDK.' }
       }
       $env:Path = "$flutterRoot\bin;$env:Path"
       flutter --version
