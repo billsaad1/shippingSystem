@@ -79,11 +79,14 @@ class _AppShellState extends State<AppShell> {
                         database: widget.database,
                         invoiceToImport: _invoiceToImport,
                       ),
-                      CompanySettingsScreen(
-                        database: widget.database,
-                        onSaved: (profile) =>
-                            setState(() => _companyProfile = profile),
-                      ),
+                      if (_selectedIndex == 2)
+                        CompanySettingsScreen(
+                          database: widget.database,
+                          onSaved: (profile) =>
+                              setState(() => _companyProfile = profile),
+                        )
+                      else
+                        const SizedBox.shrink(),
                     ],
                   ),
                 ),
