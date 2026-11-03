@@ -140,6 +140,7 @@ class ShippingInvoice {
     this.arrivalDate = '',
     this.customerName = '',
     this.customerNumber = '',
+    this.customerId,
     this.containerCount = '',
     this.quantity = '',
     this.weight = '',
@@ -160,6 +161,7 @@ class ShippingInvoice {
   final String arrivalDate;
   final String customerName;
   final String customerNumber;
+  final int? customerId;
   final String containerCount;
   final String quantity;
   final String weight;
@@ -188,6 +190,7 @@ class ShippingInvoice {
     'arrivalDate': arrivalDate,
     'customerName': customerName,
     'customerNumber': customerNumber,
+    'customerId': customerId,
     'containerCount': containerCount,
     'quantity': quantity,
     'weight': weight,
@@ -211,6 +214,7 @@ class ShippingInvoice {
       arrivalDate: json['arrivalDate'] as String? ?? '',
       customerName: json['customerName'] as String? ?? '',
       customerNumber: json['customerNumber'] as String? ?? '',
+      customerId: (json['customerId'] as num?)?.toInt(),
       containerCount: json['containerCount'] as String? ?? '',
       quantity: json['quantity'] as String? ?? '',
       weight: json['weight'] as String? ?? '',
@@ -230,6 +234,7 @@ class ReceiptVoucher {
     this.receiptDate = '',
     this.bankNumber = '',
     this.customerName = '',
+    this.customerId,
     this.amount = '',
     this.currency = 'USD',
     this.amountInWords = '',
@@ -245,6 +250,7 @@ class ReceiptVoucher {
   final String receiptDate;
   final String bankNumber;
   final String customerName;
+  final int? customerId;
   final String amount;
   final String currency;
   final String amountInWords;
@@ -262,6 +268,7 @@ class ReceiptVoucher {
     'receiptDate': receiptDate,
     'bankNumber': bankNumber,
     'customerName': customerName,
+    'customerId': customerId,
     'amount': amount,
     'currency': currency,
     'amountInWords': amountInWords,
@@ -278,6 +285,7 @@ class ReceiptVoucher {
     receiptDate: json['receiptDate'] as String? ?? '',
     bankNumber: json['bankNumber'] as String? ?? '',
     customerName: json['customerName'] as String? ?? '',
+    customerId: (json['customerId'] as num?)?.toInt(),
     amount: json['amount'] as String? ?? '',
     currency: json['currency'] as String? ?? 'USD',
     amountInWords: json['amountInWords'] as String? ?? '',

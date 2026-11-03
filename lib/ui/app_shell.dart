@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../data/local_database.dart';
 import '../models/document_models.dart';
 import 'company_settings_screen.dart';
+import 'customer_accounts_screen.dart';
 import 'document_forms.dart';
 
 class AppShell extends StatefulWidget {
@@ -53,7 +54,8 @@ class _AppShellState extends State<AppShell> {
     final title = switch (_selectedIndex) {
       0 => 'إصدار فاتورة شحن',
       1 => 'إصدار سند قبض',
-      _ => 'إعدادات الشركة',
+      2 => 'إعدادات الشركة',
+      _ => 'العملاء والحسابات',
     };
     return Scaffold(
       body: Row(
@@ -85,6 +87,10 @@ class _AppShellState extends State<AppShell> {
                           onSaved: (profile) =>
                               setState(() => _companyProfile = profile),
                         )
+                      else
+                        const SizedBox.shrink(),
+                      if (_selectedIndex == 3)
+                        CustomerAccountsScreen(database: widget.database)
                       else
                         const SizedBox.shrink(),
                     ],
@@ -177,6 +183,12 @@ class _SideNavigation extends StatelessWidget {
               label: 'بيانات الشركة',
               selected: selectedIndex == 2,
               onTap: () => onSelect(2),
+            ),
+            _NavigationButton(
+              icon: Icons.groups_outlined,
+              label: 'العملاء والحسابات',
+              selected: selectedIndex == 3,
+              onTap: () => onSelect(3),
             ),
             const Spacer(),
             const Padding(

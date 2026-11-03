@@ -7,6 +7,7 @@ import '../data/local_database.dart';
 import '../models/document_models.dart';
 import '../services/amount_to_words.dart';
 import '../services/pdf_service.dart';
+import 'customer_accounts_screen.dart';
 
 class InvoiceFormScreen extends StatefulWidget {
   const InvoiceFormScreen({
@@ -27,6 +28,7 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
   final Map<String, TextEditingController> _fields = {};
   final List<_ChargeEditors> _charges = [];
   String _currency = 'USD';
+  int? _customerId;
   bool _busy = false;
 
   @override
@@ -97,6 +99,7 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     arrivalDate: _value('arrivalDate'),
     customerName: _value('customerName'),
     customerNumber: _value('customerNumber'),
+    customerId: _customerId,
     containerCount: _value('containerCount'),
     quantity: _value('quantity'),
     weight: _value('weight'),
@@ -115,11 +118,21 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
 
   String _value(String key) => _fields[key]!.text.trim();
 
+  Future<ShippingInvoice> _saveCurrentInvoice() async {
+    final invoice = _collect();
+    final customerId = await widget.database.saveInvoice(invoice);
+    if (customerId != null) _customerId = customerId;
+    return ShippingInvoice.fromJson({
+      ...invoice.toJson(),
+      'customerId': customerId,
+    });
+  }
+
   Future<void> _saveRecord() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _busy = true);
     try {
-      await widget.database.saveInvoice(_collect());
+      await _saveCurrentInvoice();
       if (mounted) _message('تم حفظ الفاتورة محليًا');
     } catch (error) {
       if (mounted) _message('تعذر حفظ الفاتورة: $error', error: true);
@@ -132,10 +145,9 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final onCreateReceipt = widget.onCreateReceipt;
     if (onCreateReceipt == null) return;
-    final invoice = _collect();
     setState(() => _busy = true);
     try {
-      await widget.database.saveInvoice(invoice);
+      final invoice = await _saveCurrentInvoice();
       if (mounted) {
         _message('تم حفظ الفاتورة، ونقل بياناتها إلى سند القبض');
         onCreateReceipt(invoice);
@@ -164,10 +176,9 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
 
   Future<void> _savePdf() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    final data = _collect();
     setState(() => _busy = true);
     try {
-      await widget.database.saveInvoice(data);
+      final data = await _saveCurrentInvoice();
       final company = await widget.database.getCompanyProfile();
       final bytes = await PdfService.invoice(data, company: company);
       final fileName = 'فاتورة-شحن-${_safeName(data.invoiceNumber)}.pdf';
@@ -193,8 +204,7 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
 
   Future<void> _print() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    final data = _collect();
-    await widget.database.saveInvoice(data);
+    final data = await _saveCurrentInvoice();
     final company = await widget.database.getCompanyProfile();
     await Printing.layoutPdf(
       onLayout: (_) => PdfService.invoice(data, company: company),
@@ -215,6 +225,14 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
       ),
     );
     if (selected != null) _load(selected);
+  }
+
+  Future<void> _selectCustomer() async {
+    final customer = await selectCustomerDialog(context, widget.database);
+    if (customer == null || !mounted) return;
+    setState(() => _customerId = customer.id);
+    _fields['customerName']!.text = customer.name;
+    _fields['customerNumber']!.text = customer.customerNumber;
   }
 
   void _load(ShippingInvoice data) {
@@ -251,7 +269,10 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
       charge.description.addListener(_refresh);
       charge.amount.addListener(_refresh);
     }
-    setState(() => _currency = data.currency);
+    setState(() {
+      _currency = data.currency;
+      _customerId = data.customerId;
+    });
   }
 
   @override
@@ -331,9 +352,23 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
             _FormSection(
               title: 'بيانات العميل والحمولة',
               icon: Icons.person_outline,
+              trailing: TextButton.icon(
+                onPressed: _busy ? null : _selectCustomer,
+                icon: const Icon(Icons.person_search_outlined),
+                label: const Text('اختيار عميل محفوظ'),
+              ),
               child: _formGrid([
-                _input('اسم العميل', 'customerName', required: true),
-                _input('رقم العميل', 'customerNumber'),
+                _input(
+                  'اسم العميل',
+                  'customerName',
+                  required: true,
+                  onChanged: (_) => _customerId = null,
+                ),
+                _input(
+                  'رقم العميل',
+                  'customerNumber',
+                  onChanged: (_) => _customerId = null,
+                ),
                 _input('عدد الحاويات', 'containerCount'),
                 _input('الكمية', 'quantity', keyboard: TextInputType.number),
                 _input(
@@ -445,11 +480,13 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     String key, {
     bool required = false,
     TextInputType? keyboard,
+    ValueChanged<String>? onChanged,
   }) => _controllerField(
     label,
     _fields[key]!,
     required: required,
     keyboard: keyboard,
+    onChanged: onChanged,
   );
 
   Widget _controllerField(
@@ -457,10 +494,12 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     TextEditingController controller, {
     bool required = false,
     TextInputType? keyboard,
+    ValueChanged<String>? onChanged,
   }) => TextFormField(
     key: ValueKey('invoice-field-$label'),
     controller: controller,
     keyboardType: keyboard,
+    onChanged: onChanged,
     textAlign: TextAlign.right,
     decoration: InputDecoration(labelText: label),
     validator: required
@@ -531,6 +570,7 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final Map<String, TextEditingController> _fields = {};
   String _currency = 'USD';
+  int? _customerId;
   bool _busy = false;
   bool _updatingWords = false;
 
@@ -576,7 +616,10 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
   }
 
   void _applyInvoice(ShippingInvoice invoice) {
-    setState(() => _currency = invoice.currency);
+    setState(() {
+      _currency = invoice.currency;
+      _customerId = invoice.customerId;
+    });
     _fields['customerName']!.text = invoice.customerName;
     _fields['amount']!.text = invoice.total.toStringAsFixed(2);
     _fields['sourceInvoiceNumber']!.text = invoice.invoiceNumber;
@@ -616,6 +659,7 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
     receiptDate: _value('receiptDate'),
     bankNumber: _value('bankNumber'),
     customerName: _value('customerName'),
+    customerId: _customerId,
     amount: _value('amount'),
     currency: _currency,
     amountInWords: _value('amountInWords'),
@@ -627,11 +671,21 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
     sourceInvoiceNumber: _value('sourceInvoiceNumber'),
   );
 
+  Future<ReceiptVoucher> _saveCurrentReceipt() async {
+    final receipt = _collect();
+    final customerId = await widget.database.saveReceipt(receipt);
+    if (customerId != null) _customerId = customerId;
+    return ReceiptVoucher.fromJson({
+      ...receipt.toJson(),
+      'customerId': customerId,
+    });
+  }
+
   Future<void> _saveRecord() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _busy = true);
     try {
-      await widget.database.saveReceipt(_collect());
+      await _saveCurrentReceipt();
       if (mounted) _message('تم حفظ السند محليًا');
     } catch (error) {
       if (mounted) _message('تعذر حفظ السند: $error', error: true);
@@ -654,10 +708,9 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
 
   Future<void> _savePdf() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    final data = _collect();
     setState(() => _busy = true);
     try {
-      await widget.database.saveReceipt(data);
+      final data = await _saveCurrentReceipt();
       final company = await widget.database.getCompanyProfile();
       final bytes = await PdfService.receipt(data, company: company);
       final fileName = 'سند-قبض-${_safeName(data.receiptNumber)}.pdf';
@@ -683,12 +736,18 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
 
   Future<void> _print() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    final data = _collect();
-    await widget.database.saveReceipt(data);
+    final data = await _saveCurrentReceipt();
     final company = await widget.database.getCompanyProfile();
     await Printing.layoutPdf(
       onLayout: (_) => PdfService.receipt(data, company: company),
     );
+  }
+
+  Future<void> _selectCustomer() async {
+    final customer = await selectCustomerDialog(context, widget.database);
+    if (customer == null || !mounted) return;
+    setState(() => _customerId = customer.id);
+    _fields['customerName']!.text = customer.name;
   }
 
   Future<void> _selectInvoice() async {
@@ -742,7 +801,10 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
       'description': data.description,
       'sourceInvoiceNumber': data.sourceInvoiceNumber,
     };
-    setState(() => _currency = data.currency);
+    setState(() {
+      _currency = data.currency;
+      _customerId = data.customerId;
+    });
     for (final entry in values.entries) {
       _fields[entry.key]!.text = entry.value;
     }
@@ -799,6 +861,11 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
             _FormSection(
               title: 'بيانات السند',
               icon: Icons.receipt_outlined,
+              trailing: TextButton.icon(
+                onPressed: _busy ? null : _selectCustomer,
+                icon: const Icon(Icons.person_search_outlined),
+                label: const Text('اختيار عميل محفوظ'),
+              ),
               child: _formGrid([
                 _input('رقم السند', 'receiptNumber', required: true),
                 _input('تاريخ السند', 'receiptDate', required: true),
@@ -807,6 +874,7 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
                   'استلمنا من (اسم العميل)',
                   'customerName',
                   required: true,
+                  onChanged: (_) => _customerId = null,
                 ),
                 _input(
                   'المبلغ بالأرقام',
@@ -880,11 +948,13 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
     String key, {
     bool required = false,
     TextInputType? keyboard,
+    ValueChanged<String>? onChanged,
   }) => _controllerInput(
     label,
     _fields[key]!,
     required: required,
     keyboard: keyboard,
+    onChanged: onChanged,
   );
 
   Widget _controllerInput(
@@ -893,11 +963,13 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
     bool required = false,
     TextInputType? keyboard,
     int maxLines = 1,
+    ValueChanged<String>? onChanged,
   }) => TextFormField(
     key: ValueKey('receipt-field-$label'),
     controller: controller,
     keyboardType: keyboard,
     maxLines: maxLines,
+    onChanged: onChanged,
     textAlign: TextAlign.right,
     decoration: InputDecoration(
       labelText: label,

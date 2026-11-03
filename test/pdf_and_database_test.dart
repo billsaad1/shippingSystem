@@ -24,6 +24,11 @@ void main() {
           ),
         ],
       ),
+      company: const CompanyProfile(
+        arabicName: 'شركة شحن تجريبية',
+        englishName: 'Test Shipping Co.',
+        logoPath: 'assets/images/company_mark.png',
+      ),
     );
 
     expect(String.fromCharCodes(bytes.take(4)), '%PDF');
@@ -43,6 +48,15 @@ void main() {
         bankName: 'البنك التجريبي',
         chequeNumber: 'CHK-10',
         description: 'رسوم تحضير حاوية',
+        sourceInvoiceNumber: 'TEST-1',
+      ),
+      company: const CompanyProfile(
+        arabicName: 'شركة شحن تجريبية',
+        englishName: 'Test Shipping Co.',
+        logoPath: 'assets/images/company_mark.png',
+        signature1Label: 'المستلم',
+        signature2Label: 'المحاسب',
+        signature3Label: '',
       ),
     );
 
@@ -66,13 +80,27 @@ void main() {
         receiptDate: '03/11/2026',
         customerName: 'مستلم تجريبي',
         amount: '55.50',
+        sourceInvoiceNumber: 'DB-1',
+      );
+      const profile = CompanyProfile(
+        arabicName: 'شركة قاعدة البيانات',
+        englishName: 'Database Shipping Co.',
       );
 
       await database.saveInvoice(invoice);
       await database.saveReceipt(receipt);
+      await database.saveCompanyProfile(profile);
 
       expect((await database.recentInvoices()).single.invoiceNumber, 'DB-1');
       expect((await database.recentReceipts()).single.numericAmount, 55.5);
+      expect(
+        (await database.recentReceipts()).single.sourceInvoiceNumber,
+        'DB-1',
+      );
+      expect(
+        (await database.getCompanyProfile()).arabicName,
+        'شركة قاعدة البيانات',
+      );
     } finally {
       await database.close();
     }

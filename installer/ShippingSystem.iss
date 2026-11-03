@@ -1,6 +1,6 @@
 #define MyAppName "Shipping System"
-#define MyAppVersion "1.0.0"
-#define MyAppPublisher "Al-Hilal Shipping"
+#define MyAppVersion "1.1.0"
+#define MyAppPublisher "Shipping System"
 #define MyAppExeName "shipping_system.exe"
 
 [Setup]
