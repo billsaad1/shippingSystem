@@ -1,16 +1,6 @@
 name: Windows installer
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'lib/**'
-      - 'assets/**'
-      - 'windows/**'
-      - 'installer/**'
-      - 'pubspec.yaml'
-      - 'pubspec.lock'
-      - '.github/workflows/windows-installer.yml'
   workflow_dispatch:
 
 permissions:
@@ -73,13 +63,13 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: Shipping System v1.0.0
+          tag_name: v1.1.0
+          name: Shipping System v1.1.0
           target_commitish: ${{ github.sha }}
           body: |
-            Windows desktop installer for the Arabic shipping documents application.
+            Windows desktop installer for the shipping documents and customer accounts application.
 
-            Download `ShippingSystem-Setup.exe`, run it, and optionally select the desktop shortcut during installation.
+            Download `ShippingSystem-Setup.exe` and run it. The installer offers an optional desktop shortcut.
           files: dist/ShippingSystem-Setup.exe
           overwrite_files: true
           make_latest: true
