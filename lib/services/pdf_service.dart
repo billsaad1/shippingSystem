@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -10,8 +12,12 @@ class PdfService {
   static const _paleBlue = PdfColor.fromInt(0xFFEAF6FC);
   static const _red = PdfColor.fromInt(0xFF9E3B3B);
 
-  static Future<Uint8List> invoice(ShippingInvoice data) async {
-    final assets = await _loadAssets();
+  static Future<Uint8List> invoice(
+    ShippingInvoice data, {
+    CompanyProfile? company,
+  }) async {
+    final profile = company ?? CompanyProfile.defaults();
+    final assets = await _loadAssets(logoPath: profile.logoPath);
     final document = pw.Document();
     final theme = pw.ThemeData.withFont(
       base: assets.regular,
@@ -33,7 +39,11 @@ class PdfService {
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-              _companyHeader(assets, title: 'فاتورة أجور شحن'),
+              _companyHeader(
+                assets,
+                profile: profile,
+                title: profile.invoiceTitle,
+              ),
               pw.SizedBox(height: 7),
               _invoiceTopLine(data, assets),
               pw.SizedBox(height: 4),
@@ -70,8 +80,12 @@ class PdfService {
     return document.save();
   }
 
-  static Future<Uint8List> receipt(ReceiptVoucher data) async {
-    final assets = await _loadAssets();
+  static Future<Uint8List> receipt(
+    ReceiptVoucher data, {
+    CompanyProfile? company,
+  }) async {
+    final profile = company ?? CompanyProfile.defaults();
+    final assets = await _loadAssets(logoPath: profile.logoPath);
     final document = pw.Document();
     final theme = pw.ThemeData.withFont(
       base: assets.regular,
@@ -95,7 +109,11 @@ class PdfService {
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-              _companyHeader(assets, title: 'سند قبض - شيك'),
+              _companyHeader(
+                assets,
+                profile: profile,
+                title: profile.receiptTitle,
+              ),
               pw.SizedBox(height: 8),
               pw.Row(
                 children: [
@@ -184,14 +202,10 @@ class PdfService {
                 ),
               ),
               pw.Spacer(),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-                children: [
-                  _signature('المستلم', assets),
-                  _signature('المراجع', assets),
-                  _signature('مدير الحسابات', assets),
-                ],
-              ),
+              if (profile.receiptSignatureLabels
+                  .where((label) => label.trim().isNotEmpty)
+                  .isNotEmpty)
+                _signatureRow(profile.receiptSignatureLabels, assets),
             ],
           ),
         ),
@@ -200,7 +214,7 @@ class PdfService {
     return document.save();
   }
 
-  static Future<_PdfAssets> _loadAssets() async {
+  static Future<_PdfAssets> _loadAssets({String? logoPath}) async {
     final regularData = await rootBundle.load(
       'assets/fonts/NotoNaskhArabic-Regular.ttf',
     );
@@ -213,17 +227,64 @@ class PdfService {
     final latinBoldData = await rootBundle.load(
       'assets/fonts/NotoSans-Bold.ttf',
     );
-    final markData = await rootBundle.load('assets/images/company_mark.png');
+    pw.ImageProvider? logo;
+    final path = logoPath?.trim() ?? '';
+    final extension = path.split('.').last.toLowerCase();
+    if (path.isNotEmpty &&
+        (extension == 'png' || extension == 'jpg' || extension == 'jpeg')) {
+      try {
+        final file = File(path);
+        if (await file.exists()) {
+          final logoData = await file.readAsBytes();
+          if (logoData.isNotEmpty) {
+            logo = pw.MemoryImage(logoData);
+          }
+        }
+      } on Object {
+        logo = null;
+      }
+    }
     return _PdfAssets(
       regular: pw.Font.ttf(regularData),
       bold: pw.Font.ttf(boldData),
       latinRegular: pw.Font.ttf(latinRegularData),
       latinBold: pw.Font.ttf(latinBoldData),
-      mark: pw.MemoryImage(markData.buffer.asUint8List()),
+      logo: logo,
     );
   }
 
-  static pw.Widget _companyHeader(_PdfAssets assets, {required String title}) {
+  static pw.Widget _companyHeader(
+    _PdfAssets assets, {
+    required CompanyProfile profile,
+    required String title,
+  }) {
+    final arabicLines = <pw.Widget?>[
+      _optionalText(profile.arabicName, assets, size: 11, bold: true),
+      _optionalText(profile.arabicCountry, assets, size: 10, bold: true),
+      _optionalText(profile.arabicAddress, assets, size: 10, bold: true),
+      _optionalArabicContactLine(profile, assets),
+      _optionalText(
+        profile.arabicPostBox.trim().isEmpty
+            ? ''
+            : 'صندوق البريد: ${profile.arabicPostBox}',
+        assets,
+        size: 9,
+      ),
+      _optionalText(profile.arabicExtraLine, assets, size: 9),
+    ].whereType<pw.Widget>().toList();
+    final englishLines = <pw.Widget?>[
+      _optionalEnglish(profile.englishName, assets, bold: true),
+      _optionalEnglish(profile.englishCountry, assets),
+      _optionalEnglish(profile.englishAddress, assets),
+      _optionalEnglishContactLine(profile, assets),
+      _optionalEnglish(
+        profile.englishPostBox.trim().isEmpty
+            ? ''
+            : 'P.O. Box: ${profile.englishPostBox}',
+        assets,
+      ),
+      _optionalEnglish(profile.englishExtraLine, assets),
+    ].whereType<pw.Widget>().toList();
     return pw.Column(
       children: [
         pw.Container(
@@ -238,71 +299,27 @@ class PdfService {
               pw.Expanded(
                 flex: 4,
                 child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    _text(
-                      'شركة الهلال للملاحة اليمن المحدودة - فرع عدن',
-                      assets,
-                      size: 11,
-                      bold: true,
-                      align: pw.TextAlign.right,
-                    ),
-                    _text(
-                      'الجمهورية اليمنية',
-                      assets,
-                      size: 10,
-                      bold: true,
-                      align: pw.TextAlign.right,
-                    ),
-                    _text(
-                      'عدن - شارع المعلا - دكة',
-                      assets,
-                      size: 10,
-                      bold: true,
-                      align: pw.TextAlign.right,
-                    ),
-                    pw.Row(
-                      children: [
-                        _text('رقم التلفون:', assets, size: 9),
-                        pw.SizedBox(width: 2),
-                        _textLtr('02-221844', assets, size: 9),
-                        pw.SizedBox(width: 6),
-                        _text('رقم الفاكس:', assets, size: 9),
-                        pw.SizedBox(width: 2),
-                        _textLtr('02-247844', assets, size: 9),
-                      ],
-                    ),
-                    _text(
-                      'رقم البريد: 3147',
-                      assets,
-                      size: 9,
-                      align: pw.TextAlign.right,
-                    ),
-                  ],
+                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                  children: [...arabicLines],
                 ),
               ),
               pw.SizedBox(width: 8),
               pw.SizedBox(
                 width: 48,
                 height: 56,
-                child: pw.Image(assets.mark, fit: pw.BoxFit.contain),
+                child: assets.logo == null
+                    ? pw.SizedBox(width: 48, height: 56)
+                    : pw.Align(
+                        alignment: pw.Alignment.center,
+                        child: pw.Image(assets.logo!, fit: pw.BoxFit.contain),
+                      ),
               ),
               pw.SizedBox(width: 8),
               pw.Expanded(
                 flex: 4,
                 child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    _english(
-                      'Alhalal Shipping co (Yemen) Ltd',
-                      assets,
-                      bold: true,
-                    ),
-                    _english('Republic of Yemen', assets),
-                    _english('Aden - Al-Mualla Street', assets),
-                    _english('Tel: 02-221844   Fax: 02-247844', assets),
-                    _english('P.O. Box: 3147', assets),
-                  ],
+                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                  children: [...englishLines],
                 ),
               ),
             ],
@@ -326,6 +343,80 @@ class PdfService {
         ),
       ],
     );
+  }
+
+  static pw.Widget? _optionalText(
+    String value,
+    _PdfAssets assets, {
+    double size = 9,
+    bool bold = false,
+  }) {
+    if (value.trim().isEmpty) {
+      return null;
+    }
+    return pw.Container(
+      alignment: pw.Alignment.centerRight,
+      child: _text(
+        value,
+        assets,
+        size: size,
+        bold: bold,
+        align: pw.TextAlign.right,
+      ),
+    );
+  }
+
+  static pw.Widget? _optionalEnglish(
+    String value,
+    _PdfAssets assets, {
+    bool bold = false,
+  }) {
+    if (value.trim().isEmpty) {
+      return null;
+    }
+    return pw.Container(
+      alignment: pw.Alignment.centerLeft,
+      child: _english(value, assets, bold: bold),
+    );
+  }
+
+  static pw.Widget? _optionalArabicContactLine(
+    CompanyProfile profile,
+    _PdfAssets assets,
+  ) {
+    final children = <pw.Widget>[];
+    if (profile.arabicPhone.trim().isNotEmpty) {
+      children.addAll([
+        _text('رقم التلفون:', assets, size: 9),
+        pw.SizedBox(width: 2),
+        _textLtr(profile.arabicPhone, assets, size: 9),
+      ]);
+    }
+    if (profile.arabicFax.trim().isNotEmpty) {
+      if (children.isNotEmpty) {
+        children.add(pw.SizedBox(width: 6));
+      }
+      children.addAll([
+        _text('رقم الفاكس:', assets, size: 9),
+        pw.SizedBox(width: 2),
+        _textLtr(profile.arabicFax, assets, size: 9),
+      ]);
+    }
+    return children.isEmpty ? null : pw.Row(children: children);
+  }
+
+  static pw.Widget? _optionalEnglishContactLine(
+    CompanyProfile profile,
+    _PdfAssets assets,
+  ) {
+    final parts = <String>[];
+    if (profile.englishPhone.trim().isNotEmpty) {
+      parts.add('Tel: ${profile.englishPhone}');
+    }
+    if (profile.englishFax.trim().isNotEmpty) {
+      parts.add('Fax: ${profile.englishFax}');
+    }
+    return parts.isEmpty ? null : _english(parts.join('   '), assets);
   }
 
   static pw.Widget _invoiceTopLine(ShippingInvoice data, _PdfAssets assets) {
@@ -539,15 +630,29 @@ class PdfService {
     }).toList(),
   );
 
-  static pw.Widget _signature(String title, _PdfAssets assets) => pw.Container(
+  static pw.Widget _signatureRow(List<String> labels, _PdfAssets assets) {
+    final nonEmptyLabels = labels
+        .where((label) => label.trim().isNotEmpty)
+        .toList();
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+      children: nonEmptyLabels
+          .map((label) => _signature(label.trim(), assets))
+          .toList(),
+    );
+  }
+
+  static pw.Widget _signature(String title, _PdfAssets assets) => pw.SizedBox(
     width: 95,
-    padding: const pw.EdgeInsets.only(top: 5),
-    decoration: const pw.BoxDecoration(
-      border: pw.Border(
-        top: pw.BorderSide(color: PdfColors.grey700, width: 0.5),
-      ),
+    height: 48,
+    child: pw.Column(
+      children: [
+        pw.SizedBox(height: 17),
+        pw.Container(width: 95, height: 0.6, color: PdfColors.grey700),
+        pw.SizedBox(height: 3),
+        _text(title, assets, size: 8, align: pw.TextAlign.center),
+      ],
     ),
-    child: _text(title, assets, size: 8, align: pw.TextAlign.center),
   );
 
   static pw.Widget _text(
@@ -664,12 +769,12 @@ class _PdfAssets {
     required this.bold,
     required this.latinRegular,
     required this.latinBold,
-    required this.mark,
+    required this.logo,
   });
 
   final pw.Font regular;
   final pw.Font bold;
   final pw.Font latinRegular;
   final pw.Font latinBold;
-  final pw.ImageProvider mark;
+  final pw.ImageProvider? logo;
 }
