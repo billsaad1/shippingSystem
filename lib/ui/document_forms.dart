@@ -9,9 +9,14 @@ import '../services/amount_to_words.dart';
 import '../services/pdf_service.dart';
 
 class InvoiceFormScreen extends StatefulWidget {
-  const InvoiceFormScreen({required this.database, super.key});
+  const InvoiceFormScreen({
+    required this.database,
+    this.onCreateReceipt,
+    super.key,
+  });
 
   final LocalDatabase database;
+  final ValueChanged<ShippingInvoice>? onCreateReceipt;
 
   @override
   State<InvoiceFormScreen> createState() => _InvoiceFormScreenState();
@@ -123,10 +128,32 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     }
   }
 
+  Future<void> _createReceiptFromInvoice() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final onCreateReceipt = widget.onCreateReceipt;
+    if (onCreateReceipt == null) return;
+    final invoice = _collect();
+    setState(() => _busy = true);
+    try {
+      await widget.database.saveInvoice(invoice);
+      if (mounted) {
+        _message('تم حفظ الفاتورة، ونقل بياناتها إلى سند القبض');
+        onCreateReceipt(invoice);
+      }
+    } catch (error) {
+      if (mounted) {
+        _message('تعذر إنشاء السند من الفاتورة: $error', error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _preview() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final data = _collect();
-    final bytes = await PdfService.invoice(data);
+    final company = await widget.database.getCompanyProfile();
+    final bytes = await PdfService.invoice(data, company: company);
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -141,7 +168,8 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     setState(() => _busy = true);
     try {
       await widget.database.saveInvoice(data);
-      final bytes = await PdfService.invoice(data);
+      final company = await widget.database.getCompanyProfile();
+      final bytes = await PdfService.invoice(data, company: company);
       final fileName = 'فاتورة-شحن-${_safeName(data.invoiceNumber)}.pdf';
       final location = await getSaveLocation(
         suggestedName: fileName,
@@ -167,7 +195,10 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final data = _collect();
     await widget.database.saveInvoice(data);
-    await Printing.layoutPdf(onLayout: (_) => PdfService.invoice(data));
+    final company = await widget.database.getCompanyProfile();
+    await Printing.layoutPdf(
+      onLayout: (_) => PdfService.invoice(data, company: company),
+    );
   }
 
   Future<void> _openSaved() async {
@@ -260,6 +291,11 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
           onPressed: _busy ? null : _saveRecord,
           icon: const Icon(Icons.save_outlined),
           label: const Text('حفظ سجل'),
+        ),
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _createReceiptFromInvoice,
+          icon: const Icon(Icons.move_to_inbox_outlined),
+          label: const Text('إنشاء سند من الفاتورة'),
         ),
       ],
       child: Form(
@@ -422,6 +458,7 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     bool required = false,
     TextInputType? keyboard,
   }) => TextFormField(
+    key: ValueKey('invoice-field-$label'),
     controller: controller,
     keyboardType: keyboard,
     textAlign: TextAlign.right,
@@ -477,9 +514,14 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
 }
 
 class ReceiptFormScreen extends StatefulWidget {
-  const ReceiptFormScreen({required this.database, super.key});
+  const ReceiptFormScreen({
+    required this.database,
+    this.invoiceToImport,
+    super.key,
+  });
 
   final LocalDatabase database;
+  final ValueNotifier<ShippingInvoice?>? invoiceToImport;
 
   @override
   State<ReceiptFormScreen> createState() => _ReceiptFormScreenState();
@@ -507,11 +549,44 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
       'referenceNumber',
       'dueDate',
       'description',
+      'sourceInvoiceNumber',
     ]) {
       _fields[key] = TextEditingController();
     }
     _fields['receiptDate']!.text = _today();
     _fields['amount']!.addListener(_updateAmountWords);
+    widget.invoiceToImport?.addListener(_handleInvoiceImport);
+  }
+
+  @override
+  void didUpdateWidget(covariant ReceiptFormScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.invoiceToImport != widget.invoiceToImport) {
+      oldWidget.invoiceToImport?.removeListener(_handleInvoiceImport);
+      widget.invoiceToImport?.addListener(_handleInvoiceImport);
+    }
+  }
+
+  void _handleInvoiceImport() {
+    final notifier = widget.invoiceToImport;
+    final invoice = notifier?.value;
+    if (invoice == null) return;
+    notifier!.value = null;
+    _applyInvoice(invoice);
+  }
+
+  void _applyInvoice(ShippingInvoice invoice) {
+    setState(() => _currency = invoice.currency);
+    _fields['customerName']!.text = invoice.customerName;
+    _fields['amount']!.text = invoice.total.toStringAsFixed(2);
+    _fields['sourceInvoiceNumber']!.text = invoice.invoiceNumber;
+    _fields['description']!.text = invoice.invoiceNumber.trim().isEmpty
+        ? 'سداد فاتورة أجور الشحن'
+        : 'سداد فاتورة أجور الشحن رقم ${invoice.invoiceNumber}';
+    _updateAmountWords();
+    if (mounted) {
+      _message('تم نقل بيانات الفاتورة رقم ${invoice.invoiceNumber}');
+    }
   }
 
   void _updateAmountWords() {
@@ -527,6 +602,7 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
 
   @override
   void dispose() {
+    widget.invoiceToImport?.removeListener(_handleInvoiceImport);
     for (final controller in _fields.values) {
       controller.dispose();
     }
@@ -548,6 +624,7 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
     referenceNumber: _value('referenceNumber'),
     dueDate: _value('dueDate'),
     description: _value('description'),
+    sourceInvoiceNumber: _value('sourceInvoiceNumber'),
   );
 
   Future<void> _saveRecord() async {
@@ -565,7 +642,8 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
 
   Future<void> _preview() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    final bytes = await PdfService.receipt(_collect());
+    final company = await widget.database.getCompanyProfile();
+    final bytes = await PdfService.receipt(_collect(), company: company);
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -580,7 +658,8 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
     setState(() => _busy = true);
     try {
       await widget.database.saveReceipt(data);
-      final bytes = await PdfService.receipt(data);
+      final company = await widget.database.getCompanyProfile();
+      final bytes = await PdfService.receipt(data, company: company);
       final fileName = 'سند-قبض-${_safeName(data.receiptNumber)}.pdf';
       final location = await getSaveLocation(
         suggestedName: fileName,
@@ -606,7 +685,30 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final data = _collect();
     await widget.database.saveReceipt(data);
-    await Printing.layoutPdf(onLayout: (_) => PdfService.receipt(data));
+    final company = await widget.database.getCompanyProfile();
+    await Printing.layoutPdf(
+      onLayout: (_) => PdfService.receipt(data, company: company),
+    );
+  }
+
+  Future<void> _selectInvoice() async {
+    final entries = await widget.database.recentInvoices();
+    if (!mounted) return;
+    if (entries.isEmpty) {
+      _message('لا توجد فواتير محفوظة للاختيار');
+      return;
+    }
+    final selected = await showDialog<ShippingInvoice>(
+      context: context,
+      builder: (context) => _SavedDocumentsDialog<ShippingInvoice>(
+        title: 'اختر فاتورة لربطها بالسند',
+        emptyText: 'لا توجد فواتير محفوظة بعد',
+        entries: entries,
+        titleOf: (item) => 'فاتورة رقم ${item.invoiceNumber}',
+        subtitleOf: (item) => '${item.customerName} • ${item.invoiceDate}',
+      ),
+    );
+    if (selected != null && mounted) _applyInvoice(selected);
   }
 
   Future<void> _openSaved() async {
@@ -638,6 +740,7 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
       'referenceNumber': data.referenceNumber,
       'dueDate': data.dueDate,
       'description': data.description,
+      'sourceInvoiceNumber': data.sourceInvoiceNumber,
     };
     setState(() => _currency = data.currency);
     for (final entry in values.entries) {
@@ -655,6 +758,11 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
           onPressed: _busy ? null : _openSaved,
           icon: const Icon(Icons.folder_open_outlined),
           label: const Text('فتح محفوظ'),
+        ),
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _selectInvoice,
+          icon: const Icon(Icons.link_outlined),
+          label: const Text('سحب بيانات فاتورة'),
         ),
         OutlinedButton.icon(
           onPressed: _busy ? null : _preview,
@@ -712,6 +820,11 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
                   setState(() => _currency = value);
                   _updateAmountWords();
                 }),
+                if (_value('sourceInvoiceNumber').isNotEmpty)
+                  _readOnlyValue(
+                    'الفاتورة المرتبطة',
+                    _value('sourceInvoiceNumber'),
+                  ),
               ]),
             ),
             _FormSection(
@@ -781,6 +894,7 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
     TextInputType? keyboard,
     int maxLines = 1,
   }) => TextFormField(
+    key: ValueKey('receipt-field-$label'),
     controller: controller,
     keyboardType: keyboard,
     maxLines: maxLines,
@@ -798,7 +912,7 @@ class _ReceiptFormScreenState extends State<ReceiptFormScreen> {
   Widget _readOnlyValue(String label, String value) => TextFormField(
     initialValue: value,
     readOnly: true,
-    key: ValueKey('$label-$value'),
+    key: ValueKey('receipt-readonly-$label-$value'),
     textAlign: TextAlign.right,
     decoration: InputDecoration(
       labelText: label,
@@ -855,33 +969,29 @@ class _PageFrame extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            subtitle,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF637587),
-                            ),
-                          ),
-                        ],
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(width: 14),
-                    Wrap(spacing: 7, runSpacing: 7, children: actions),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF637587),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Wrap(spacing: 7, runSpacing: 7, children: actions),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 18),
