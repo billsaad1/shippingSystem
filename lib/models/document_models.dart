@@ -1,3 +1,109 @@
+class CompanyProfile {
+  const CompanyProfile({
+    this.arabicName = '',
+    this.arabicCountry = '',
+    this.arabicAddress = '',
+    this.arabicPhone = '',
+    this.arabicFax = '',
+    this.arabicPostBox = '',
+    this.arabicExtraLine = '',
+    this.englishName = '',
+    this.englishCountry = '',
+    this.englishAddress = '',
+    this.englishPhone = '',
+    this.englishFax = '',
+    this.englishPostBox = '',
+    this.englishExtraLine = '',
+    this.invoiceTitle = 'فاتورة أجور شحن',
+    this.receiptTitle = 'سند قبض - شيك',
+    this.logoPath = '',
+    this.signature1Label = 'المستلم',
+    this.signature2Label = 'المراجع',
+    this.signature3Label = 'مدير الحسابات',
+  });
+
+  const CompanyProfile.defaults() : this();
+
+  final String arabicName;
+  final String arabicCountry;
+  final String arabicAddress;
+  final String arabicPhone;
+  final String arabicFax;
+  final String arabicPostBox;
+  final String arabicExtraLine;
+  final String englishName;
+  final String englishCountry;
+  final String englishAddress;
+  final String englishPhone;
+  final String englishFax;
+  final String englishPostBox;
+  final String englishExtraLine;
+  final String invoiceTitle;
+  final String receiptTitle;
+  final String logoPath;
+  final String signature1Label;
+  final String signature2Label;
+  final String signature3Label;
+
+  List<String> get receiptSignatureLabels => [
+    signature1Label,
+    signature2Label,
+    signature3Label,
+  ];
+
+  Map<String, Object?> toJson() => {
+    'arabicName': arabicName,
+    'arabicCountry': arabicCountry,
+    'arabicAddress': arabicAddress,
+    'arabicPhone': arabicPhone,
+    'arabicFax': arabicFax,
+    'arabicPostBox': arabicPostBox,
+    'arabicExtraLine': arabicExtraLine,
+    'englishName': englishName,
+    'englishCountry': englishCountry,
+    'englishAddress': englishAddress,
+    'englishPhone': englishPhone,
+    'englishFax': englishFax,
+    'englishPostBox': englishPostBox,
+    'englishExtraLine': englishExtraLine,
+    'invoiceTitle': invoiceTitle,
+    'receiptTitle': receiptTitle,
+    'logoPath': logoPath,
+    'signature1Label': signature1Label,
+    'signature2Label': signature2Label,
+    'signature3Label': signature3Label,
+  };
+
+  factory CompanyProfile.fromJson(Map<String, dynamic> json) {
+    final defaults = CompanyProfile.defaults();
+    String value(String key, String fallback) =>
+        json[key] as String? ?? fallback;
+
+    return CompanyProfile(
+      arabicName: value('arabicName', defaults.arabicName),
+      arabicCountry: value('arabicCountry', defaults.arabicCountry),
+      arabicAddress: value('arabicAddress', defaults.arabicAddress),
+      arabicPhone: value('arabicPhone', defaults.arabicPhone),
+      arabicFax: value('arabicFax', defaults.arabicFax),
+      arabicPostBox: value('arabicPostBox', defaults.arabicPostBox),
+      arabicExtraLine: value('arabicExtraLine', defaults.arabicExtraLine),
+      englishName: value('englishName', defaults.englishName),
+      englishCountry: value('englishCountry', defaults.englishCountry),
+      englishAddress: value('englishAddress', defaults.englishAddress),
+      englishPhone: value('englishPhone', defaults.englishPhone),
+      englishFax: value('englishFax', defaults.englishFax),
+      englishPostBox: value('englishPostBox', defaults.englishPostBox),
+      englishExtraLine: value('englishExtraLine', defaults.englishExtraLine),
+      invoiceTitle: value('invoiceTitle', defaults.invoiceTitle),
+      receiptTitle: value('receiptTitle', defaults.receiptTitle),
+      logoPath: value('logoPath', defaults.logoPath),
+      signature1Label: value('signature1Label', defaults.signature1Label),
+      signature2Label: value('signature2Label', defaults.signature2Label),
+      signature3Label: value('signature3Label', defaults.signature3Label),
+    );
+  }
+}
+
 class ChargeLine {
   const ChargeLine({this.payee = '', this.description = '', this.amount = ''});
 
@@ -132,6 +238,7 @@ class ReceiptVoucher {
     this.referenceNumber = '',
     this.dueDate = '',
     this.description = '',
+    this.sourceInvoiceNumber = '',
   });
 
   final String receiptNumber;
@@ -146,6 +253,7 @@ class ReceiptVoucher {
   final String referenceNumber;
   final String dueDate;
   final String description;
+  final String sourceInvoiceNumber;
 
   double get numericAmount => parseAmount(amount);
 
@@ -162,6 +270,7 @@ class ReceiptVoucher {
     'referenceNumber': referenceNumber,
     'dueDate': dueDate,
     'description': description,
+    'sourceInvoiceNumber': sourceInvoiceNumber,
   };
 
   factory ReceiptVoucher.fromJson(Map<String, dynamic> json) => ReceiptVoucher(
@@ -177,6 +286,7 @@ class ReceiptVoucher {
     referenceNumber: json['referenceNumber'] as String? ?? '',
     dueDate: json['dueDate'] as String? ?? '',
     description: json['description'] as String? ?? '',
+    sourceInvoiceNumber: json['sourceInvoiceNumber'] as String? ?? '',
   );
 }
 
